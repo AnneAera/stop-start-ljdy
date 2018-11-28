@@ -1,0 +1,60 @@
+import boto3
+import botocore
+import sys
+import datetime
+import time
+from botocore.vendored import requests
+
+ec2 = boto3.resource('ec2')
+client = boto3.client('sns')
+
+def lambda_handler(event, context):
+    #now = datetime.datetime.now()
+    topic_arn = 'arn:aws:sns:ap-northeast-2:444375388571:ljdy_restart'
+    #timelen = requests.get("http://13.209.150.148/bbs").elapsed.total_seconds()
+    #message = 'Ljdy website response time is ' + str(timelen) + ' seconds. Website is restarted. '
+    #subject = 'ljdy restarted at ' + now.strftime("%Y-%m-%d %H:%M:%S")
+    #client.publish(TopicArn=topic_arn, Subject=subject, Message=message)
+    
+    def filter_instances(project):
+        instance = []
+
+        if project:
+            filters=[{'Name': 'tag:Project', 'Values':[project]}]
+            instances = ec2.instances.filter(Filters=filters)
+        else:
+            instances = ec2.instances.all()
+        return instances
+    project="ljdy"
+    instances = filter_instances(project)
+    count = 0
+    timelen = requests.get("http://13.209.150.148/bbs").elapsed.total_seconds()
+    
+    while requests.get("http://13.209.150.148/bbs").elapsed.total_seconds() > 2:
+        count +=1
+        time.sleep (60)
+        print(count)
+        if count < 3:
+            continue
+        
+        for i in instances:
+            print("Stopping {0}...".format(i.id))
+            i.stop()
+            print (i.id)
+            i.wait_until_stopped()
+            print("Starting {0}...".format(i.id))
+            i.start()
+            
+            i.wait_until_running()
+            now = datetime.datetime.now()
+            #print ("Current date and time : ")
+            print (now.strftime("%Y-%m-%d %H:%M:%S"))
+            timelen = requests.get("http://13.209.150.148/bbs").elapsed.total_seconds()
+            message = 'Ljdy website response time is ' + str(timelen) + ' seconds. Website is restarted. '
+            print (message)
+            subject = 'ljdy restarted at ' + now.strftime("%Y-%m-%d %H:%M:%S")
+            client.publish(TopicArn=topic_arn, Subject=subject, Message=message)
+        break
+        
+    return ('done')
+    return
